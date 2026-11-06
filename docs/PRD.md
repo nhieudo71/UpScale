@@ -44,12 +44,13 @@ Ghi chú: chỉ số tốc độ là ngưỡng tạm vì chưa biết GPU của 
 | Must | Thông báo lỗi dễ hiểu và ghi log | Dễ tự sửa lỗi |
 | Should | Chọn model Ảnh thật / Anime | Chất lượng khác nhau theo loại ảnh |
 | Should | Xem trước ảnh gốc và ảnh kết quả cạnh nhau | Giúp đánh giá kết quả |
+| Should | Xóa nền ảnh (PNG trong suốt), chạy local trên CPU | Nhu cầu thực tế; đã có mã ở Sprint 1, xem US-09 |
 | Should (Sprint 2) | Xử lý hàng loạt cả thư mục | Tiện, nhưng không cần để chứng minh giá trị |
 
 ## 4. Non-Goals (không làm ở MVP)
 - Upscale video.
 - Tài khoản, đăng nhập, đồng bộ cloud, bất kỳ dịch vụ online nào.
-- Khử nhiễu, phục hồi khuôn mặt, tô màu, chỉnh sửa ảnh.
+- Khử nhiễu, phục hồi khuôn mặt, tô màu, các chỉnh sửa ảnh khác ngoài xóa nền.
 - Lịch sử xử lý, cài đặt nâng cao, đa ngôn ngữ.
 - Bản mobile, bản web, cài đặt dạng installer.
 - Huấn luyện hay tinh chỉnh model.
@@ -130,6 +131,16 @@ Là người dùng, tôi muốn biết chuyện gì sai và cách xử lý, đ�
 - [ ] Given xử lý xong, then hiển thị ảnh gốc và ảnh kết quả cạnh nhau, có thể phóng to.
 - [ ] Given ảnh kết quả rất lớn, when mở xem trước, then giao diện không bị đơ.
 
+### US-09 (Should, 3 điểm) - Xóa nền ảnh
+Là người dùng, tôi muốn xóa nền một ảnh ngay trên máy để dùng ảnh trong thiết kế mà không upload đi đâu.
+- [x] Given ảnh PNG/JPG đã chọn, when chọn chế độ "Xóa nền" và bấm nút, then app không hiện lựa chọn hệ số phóng to hay loại ảnh, và nút ghi "Xóa nền".
+- [x] Given xử lý xong, then lưu `<tên>_nobg.png` cạnh ảnh gốc, đúng kích thước gốc, có alpha; file gốc không đổi; file đích có sẵn thì thêm hậu tố số.
+- [x] Given ảnh gốc đã có vùng trong suốt, then vùng đó vẫn trong suốt.
+- [x] Given thiếu model hoặc thiếu thư viện, then thông báo nêu cách khắc phục, app vẫn dùng tiếp được ở chế độ còn lại.
+- [x] Chạy offline, CPU, không cần GPU.
+- Hạn chế đã biết: ảnh anime/tranh vẽ có nền phẳng chưa xóa sạch nền; viền hơi mềm với ảnh lớn. Xem `DECISIONS.md` D-06.
+- Chưa đạt: chưa ai thao tác GUI bằng tay (kiểm tra tự động: 15/15 mục).
+
 ### Bảng ưu tiên
 
 | Story | Mức | Giá trị | Công sức (điểm) | Sprint |
@@ -142,5 +153,6 @@ Là người dùng, tôi muốn biết chuyện gì sai và cách xử lý, đ�
 | US-06 Chọn model | Should | Trung bình | 2 | 1 (stretch) |
 | US-08 Xem trước/sau | Should | Trung bình | 3 | 1 (stretch) hoặc 2 |
 | US-07 Cả thư mục | Should | Trung bình | 5 | 2 |
+| US-09 Xóa nền | Should | Trung bình | 3 | 1 (đã có mã) |
 
 Điểm là ước lượng thô, sẽ hiệu chỉnh sau Sprint 1 khi có velocity thực tế.

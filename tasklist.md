@@ -44,24 +44,26 @@ Chạy app, chọn ảnh, Upscale 2x/4x khi ngắt mạng, nhận ảnh lưu c�
 - [x] **T-10 Commit đầu và push**: commit `Import UpScale Sprint 1 codebase` lên nhánh `chore/initial-import`, tác giả `nhieudo71 <nhieudo71@gmail.com>`. Máy chưa cài `gh` nên chưa mở PR. Mở bằng link: https://github.com/nhieudo71/UpScale/pull/new/chore/initial-import
 - [x] **T-02 Điều tra log**: tìm ra P7, P8. P4 và P5 chỉ giải thích được một phần (xem bảng trên).
 - [~] **T-04 Bộ 5 ảnh**: chạy 5/5 bằng engine thật, nhưng 4 trong 5 ảnh là ảnh mẫu của engine hoặc ảnh tổng hợp, và 2x của 4 ảnh đó chưa đo lại sau D-05. Còn cần ảnh chụp thật của bạn.
-- [~] **T-05 Offline**: xem trên. Còn cần tắt Wi-Fi thật rồi chạy.
-- [~] **T-06 Giấy phép model**: license mã nguồn đã đối chiếu. File model chưa có license riêng được xác nhận (README của engine không nói).
-- [x] **T-07 Chất lượng bằng mắt**: đã xem 2 ảnh mẫu. Với 2x, hai model cho PSNR gần nhau (29,7 đến 33,0 dB), không thấy model nào hơn hẳn; model ảnh thật vẫn là mặc định. Chỉ dựa trên 2 ảnh, chưa phải kết luận chắc.
-- [x] **T-08 README.md**: cài, chạy, cấu hình, phát triển, giấy phép. Dòng "xóa nền miễn phí" của bạn được giữ, kèm ghi chú rằng chưa có trong mã.
-- [ ] **T-03 Nghiệm thu GUI bằng tay** (cần bạn): chạy `run.bat`, đi hết checklist demo bên dưới.
+  - **Cập nhật (06/11)**: chạy thêm ảnh chụp thật (ầm mẫu công khai của rembg: người 600x399, hổ 1000x667, ô tô 480x360), mỗi ảnh 2x + 4x + xóa nền = 9 lượt, đều đúng kích thước, file gốc không đổi. Thời gian 2x: 4,5 đến 9,6 s; 4x: 3,9 đến 9,1 s. Vẫn còn: ảnh chụp của chính bạn.
+- [ ] **T-05 Offline** (cần bạn): tắt Wi-Fi thật rồi chạy. Máy không ai dùng nên tôi không tự tắt mạng. Bằng chứng hiện có: socket Python bị chặn 0 lần gọi, engine không có kết nối TCP/UDP, toàn bộ mã không import thư viện mạng.
+- [~] **T-06 Giấy phép model**: license mã nguồn đã đối chiếu. File model chưa có license riêng được xác nhận (README của engine không nói). Áp dụng thêm cho `u2net.onnx` (D-06).
+- [x] **T-07 Chất lượng bằng mắt**: so 3 model xóa nền và 2 model upscale trên ảnh thật. Chọn `u2net` cho xóa nền (D-06). Model ảnh thật vẫn là mặc định cho upscale.
+- [x] **T-08 README.md**: cài, chạy, cấu hình, phát triển, giấy phép, mục Xóa nền.
+- [~] **T-03 Nghiệm thu GUI**: đã tự động hóa (cửa sổ thật, engine thật, model thật, gọi đúng hàm nút bấm): **15/15 mục đạt**, gồm 2x, 4x, không ghi đè, ảnh lớn không đơ (vòng lặp Tk chậm nhất 110 ms), hủy giữa chừng về S1 trong 0,2 s không còn file tạm, file không phải ảnh, xóa nền, ẩn tùy chọn khi xóa nền, đóng app. Còn thiếu: đánh giá cảm quan bằng mắt và thao tác chuột thật.
   - Agent: `testing/testing-evidence-collector.md`
-- [ ] **T-09 Kiểm tra trước bàn giao**: làm sau T-03, T-04, T-05.
+- [ ] **T-09 Kiểm tra trước bàn giao**: chờ T-05 và phần cảm quan của T-03.
   - Agent: `testing/testing-reality-checker.md`
 
-### Checklist demo cuối sprint (cần bạn làm trên máy)
-- [ ] Mở app, chọn ảnh, thấy kích thước gốc.
-- [ ] Upscale 2x và 4x, kích thước ảnh kết quả đúng.
-- [ ] Giao diện không đơ khi đang xử lý.
+### Checklist demo cuối sprint (kiểm tra tự động 06/11, còn lại cần bạn)
+- [x] Mở app, chọn ảnh, thấy kích thước gốc.
+- [x] Upscale 2x và 4x, kích thước ảnh kết quả đúng.
+- [x] Giao diện không đơ khi đang xử lý.
 - [ ] Tắt Wi-Fi, vẫn upscale được.
-- [ ] Ảnh lớn không làm crash.
-- [ ] Chọn file không phải ảnh, thấy thông báo lỗi dễ hiểu.
-- [ ] File gốc không bị đổi, file đích không bị ghi đè.
-- [ ] Ảnh trong thư mục có dấu (vd `_ĐẢNG`) chạy được.
+- [x] Ảnh lớn không làm crash.
+- [x] Chọn file không phải ảnh, thấy thông báo lỗi dễ hiểu.
+- [x] File gốc không bị đổi, file đích không bị ghi đè.
+- [x] Ảnh trong thư mục có dấu (vd `_ĐẢNG`) chạy được (engine thật, D-04).
+- [x] Chế độ Xóa nền: ra PNG trong suốt đúng kích thước, ẩn tùy chọn phóng to.
 
 ## Stretch
 - [~] **US-06 Chọn model Ảnh thật / Anime** (2 điểm): có trong `domain/models.py` và UI; hai model đã chạy được bằng engine thật ở 2x. Chưa thử tay trên GUI.
