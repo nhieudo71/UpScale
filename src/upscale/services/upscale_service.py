@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
+import tempfile
 import threading
 import time
 import uuid
@@ -33,6 +35,8 @@ from ..infra.image_io import inspect_image
 log = logging.getLogger(__name__)
 
 EventCallback = Callable[[JobEvent], None]
+
+ENGINE_NATIVE_SCALE = 4  # hệ số gốc của cả hai model (realesrgan-x4plus và -anime)
 
 
 class UpscaleService:
@@ -93,22 +97,36 @@ class UpscaleService:
     def _run(self, job_id: str, req: UpscaleRequest, on_event: EventCallback, cancel: threading.Event) -> None:
         started = time.monotonic()
         tmp: Path | None = None
+        scratch: Path | None = None
         try:
             self._emit(on_event, JobEvent(job_id, EventType.STARTED))
             info = inspect_image(req.source_path)
             check_output_limit(info.width, info.height, req.scale, self._config.max_output_pixels)
+            # Model x4plus chỉ có bản x4: `-s 2` cho ảnh sai nội dung (tile bị xé) dù đúng kích thước,
+            # nên 2x = chạy 4x rồi thu nhỏ. Ảnh trung gian 4x vẫn phải nằm trong giới hạn của máy.
+            engine_scale = max(req.scale, ENGINE_NATIVE_SCALE)
+            try:
+                check_output_limit(info.width, info.height, engine_scale, self._config.max_output_pixels)
+            except UpscaleError as exc:
+                raise UpscaleError(
+                    ErrorCode.OUTPUT_TOO_LARGE,
+                    "Ảnh này quá lớn để phóng 2x an toàn trên máy này vì engine phải xử lý ở 4x trước. "
+                    "Hãy thu nhỏ ảnh gốc rồi thử lại.",
+                    exc.message,
+                ) from exc
             model = MODELS[req.model]
             self._check_engine_files(model)
 
             src = Path(req.source_path)
             # File tạm nằm cạnh đích để rename sau đó cùng ổ đĩa, và có đuôi .png vì engine chọn định dạng theo đuôi.
             tmp = src.with_name(f".{src.stem}_x{req.scale}.{job_id}.tmp.png")
+            scratch = self._ascii_scratch(tmp, job_id)
             run_engine(
                 self._engine_cmd,
                 src,
-                tmp,
+                scratch or tmp,
                 model.engine_name,
-                req.scale,
+                engine_scale,
                 req.gpu_id if req.gpu_id is not None else self._config.gpu_id,
                 self._config.tile,
                 None if self._custom_engine else self._config.models_dir,
@@ -117,14 +135,21 @@ class UpscaleService:
                 cancel,
             )
 
+            if scratch is not None:
+                shutil.move(scratch, tmp)  # về cạnh ảnh gốc để bước đổi tên bên dưới cùng ổ đĩa
+                scratch = None
+
             expected = output_size(info.width, info.height, req.scale)
+            engine_expected = output_size(info.width, info.height, engine_scale)
             actual = self._read_size(tmp)
-            if actual != expected:
+            if actual != engine_expected:
                 raise UpscaleError(
                     ErrorCode.ENGINE_FAILED,
                     "Engine tạo ra ảnh sai kích thước nên không lưu kết quả. Ảnh gốc không bị ảnh hưởng.",
-                    f"mong đợi {expected}, nhận {actual}",
+                    f"mong đợi {engine_expected}, nhận {actual}",
                 )
+            if engine_expected != expected:
+                self._downscale(tmp, expected)
             final = self._publish(tmp, src, req.scale)
             tmp = None
             duration_ms = int((time.monotonic() - started) * 1000)
@@ -142,13 +167,40 @@ class UpscaleService:
             self._emit(on_event, JobEvent(job_id, EventType.FAILED, code=ErrorCode.ENGINE_FAILED,
                                           message=f"Có lỗi không mong đợi ({type(exc).__name__}). Xem file log để biết chi tiết."))
         finally:
-            if tmp is not None:
-                try:
-                    tmp.unlink(missing_ok=True)
-                except OSError:
-                    log.warning("Không xóa được file tạm %s", tmp)
+            for leftover in (tmp, scratch):
+                if leftover is not None:
+                    try:
+                        leftover.unlink(missing_ok=True)
+                    except OSError:
+                        log.warning("Không xóa được file tạm %s", leftover)
             with self._lock:
                 self._job_id = None
+
+    @staticmethod
+    def _downscale(path: Path, size: tuple[int, int]) -> None:
+        """Thu ảnh 4x của engine về đúng kích thước yêu cầu (ghi đè file tạm)."""
+        with Image.open(path) as img:
+            resized = img.resize(size, Image.Resampling.LANCZOS)
+        resized.save(path, format="PNG")
+
+    @staticmethod
+    def _ascii_scratch(tmp: Path, job_id: str) -> Path | None:
+        """Engine thật crash (mã 0xC0000409) khi đường dẫn ĐẦU RA có ký tự không phải ASCII, vd thư
+        mục "_ĐẢNG" (tái hiện ngày 06/11, xem docs/DECISIONS.md). Đường dẫn đầu vào Unicode thì chạy được.
+
+        Trả về đường dẫn ASCII để engine ghi vào, hoặc None nếu tmp đã là ASCII.
+        """
+        if str(tmp).isascii():
+            return None
+        scratch = Path(tempfile.gettempdir()) / f"upscale_{job_id}.png"
+        if not str(scratch).isascii():
+            raise UpscaleError(
+                ErrorCode.ENGINE_FAILED,
+                "Engine không ghi được ảnh vào thư mục có tên chứa ký tự đặc biệt. "
+                "Hãy chép ảnh sang thư mục có tên không dấu rồi thử lại.",
+                f"cả {tmp} lẫn {scratch} đều không phải ASCII",
+            )
+        return scratch
 
     def _check_engine_files(self, model: ModelInfo) -> None:
         if self._custom_engine:

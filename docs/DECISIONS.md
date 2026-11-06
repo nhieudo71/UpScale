@@ -92,3 +92,55 @@ Lý do: Tkinter 8.6 chạy được trên Python 3.11.9, và CustomTkinter cho g
 
 ## D-03: Phiên bản Python = 3.11.9
 Dùng `python` (3.11.9) đã xác nhận có pip và Tkinter. Lệnh `py` mặc định trỏ tới 3.14, nên mọi lệnh trong hướng dẫn phải dùng `python` hoặc `py -3.11`, không dùng `py` trần.
+`.venv` đã được tạo lại bằng `py -3.11 -m venv .venv` (trước đó là 3.14.6, chưa cài thư viện).
+
+## D-04: Engine crash khi đường dẫn ĐẦU RA có ký tự Unicode (đã sửa)
+**Triệu chứng**: log 06/11 17:39 ghi `ENGINE_FAILED returncode=3221226505` (0xC0000409) với ảnh trong thư mục `...\_ĐẢNG\Chu Ky\`.
+
+**Tái hiện bằng engine thật** (RTX 3050, `-g 1`):
+| Đường dẫn vào | Đường dẫn ra | Kết quả |
+|---|---|---|
+| ASCII | ASCII | exit 0 |
+| Unicode | ASCII | exit 0 |
+| ASCII | Unicode | **exit 3221226505, không có file** |
+Ảnh RGB hay RGBA không ảnh hưởng. Chỉ đường dẫn đầu ra là nguyên nhân.
+
+**Cách sửa** (`UpscaleService._ascii_scratch`): khi file tạm cạnh ảnh gốc có ký tự không phải ASCII, engine ghi vào `%TEMP%\upscale_<job>.png`, rồi service chuyển file về cạnh ảnh gốc và đổi tên như cũ. Nếu cả `%TEMP%` cũng không phải ASCII (tên người dùng có dấu) thì báo lỗi rõ ràng thay vì để engine crash. Đã thử lại bằng engine thật trên thư mục `_ĐẢNG\Chu Ky`: ra 880x880, file kết quả nằm cạnh ảnh gốc, không còn file tạm.
+
+**Chưa kiểm chứng**: trường hợp `%TEMP%` có ký tự Unicode (nhánh báo lỗi chỉ có logic, chưa chạy với máy như vậy).
+
+## D-05: Chế độ 2x chạy engine ở 4x rồi thu nhỏ (đã sửa)
+**Phát hiện khi xem ảnh bằng mắt** (mục "Chất lượng nhìn bằng mắt" còn mở ở D-01): `-n realesrgan-x4plus -s 2` trả đúng kích thước nhưng nội dung hỏng. Ảnh bãi biển 256x256 chỉ còn một góc phóng to rồi lặp lại, ảnh anime 220x220 cũng bị cắt và nhân đôi. Cả hai model (ảnh thật và anime) đều bị. Nên kết luận ở D-01 mục 4 ("2x chạy được") chỉ đúng về kích thước, không đúng về nội dung.
+
+**Cách sửa** (`UpscaleService._run`): luôn gọi engine với `-s 4`, riêng 2x thì thu nhỏ kết quả bằng Pillow LANCZOS về đúng kích thước. Đo PSNR so với ảnh gốc phóng 2x bằng LANCZOS:
+| Ảnh | `-s 2` (hỏng) | `-s 4` rồi thu về 2x |
+|---|---|---|
+| input.jpg | 25,0 dB | 30,0 dB |
+| input2.jpg | 25,6 dB | 32,6 dB |
+Chạy qua service sau khi sửa: 30,0 / 29,7 dB (input.jpg, ảnh thật / anime) và 32,6 / 33,0 dB (input2.jpg). PSNR chỉ là chỉ báo thô vì ảnh tham chiếu là phép nội suy, không phải ảnh chuẩn.
+
+**Hệ quả**: 2x tốn thời gian và VRAM như 4x. Giới hạn `max_output_pixels` giờ áp dụng cho ảnh 4x trung gian, nên ảnh lớn bị chặn ở 2x sớm hơn trước (thông báo riêng, không còn gợi ý "Chọn 2x" vì đang ở 2x).
+
+**Chưa kiểm chứng**: chưa so chất lượng 2x giữa model ảnh thật và anime bằng mắt trên ảnh chụp thật; chỉ xem hai ảnh mẫu của engine.
+
+## Nghiệm thu Sprint 1 (06/11/2026, engine thật, RTX 3050)
+Chạy `UpscaleService` thật (không qua GUI) với 5 ảnh:
+| Ảnh | Vào | Hệ số | Ra | Thời gian | Kết quả |
+|---|---|---|---|---|---|
+| input.jpg | 220x220 | 4x | 880x880 | 3,2 s | đạt |
+| input2.jpg | 256x256 | 2x | 512x512 | 2,8 s | đạt |
+| s1000.png (tổng hợp) | 1000x1000 | 4x | 4000x4000 | 11,8 s | đạt |
+| s1672.png (tổng hợp) | 1672x941 | 2x | 3344x1882 | 16,2 s | đạt |
+| big3000.png (tổng hợp, ảnh lớn) | 3000x2000 | 2x | 6000x4000 | 55,0 s | đạt |
+Cả 5 ảnh đều đúng kích thước, file gốc không đổi (so SHA256), chạy lại ảnh đầu cho `input_x4_2.png` không ghi đè. Lưu ý: số liệu 2x ở bảng này lấy **trước** khi sửa D-05 (lúc đó 2x còn chạy `-s 2`). Đo lại sau D-05 chỉ với ảnh lớn: 3000x2000 ở 2x mất 66,2 s (đầu ra 6000x4000), ở 4x mất 65,5 s (12000x8000), trên ảnh nhiễu tổng hợp. Bốn ảnh còn lại chưa đo lại.
+Ở 4x ảnh này là 96 MP, Pillow in `DecompressionBombWarning` (ngưỡng cảnh báo 89,5 MP) nhưng vẫn mở và lưu bình thường; chỉ ngưỡng lỗi (khoảng 179 MP) mới chặn, và `max_output_pixels=150000000` nằm dưới ngưỡng đó.
+
+**Offline**: trong lúc chạy, Python bị chặn `socket.connect` và `getaddrinfo` (0 lần cố kết nối), và tôi lấy mẫu 90 lần tiến trình engine bằng `Get-NetTCPConnection`/`Get-NetUDPEndpoint` (0 kết nối). Đây **không phải** thử ngắt mạng thật (Wi-Fi vẫn bật), nên US-03 chỉ ở mức bằng chứng gián tiếp.
+
+**Ảnh chụp thật**: bộ này dùng ảnh mẫu của engine và ảnh tổng hợp, chưa có ảnh chụp thật nhiều chi tiết.
+
+**GUI**: `python run.py` sống sau 8 giây. `pyinstaller UpScale.spec` build xong và `scripts/smoke_exe.ps1` báo chạy 8 giây và ghi được `logs\app.log`. Chưa ai thao tác GUI để chọn ảnh và bấm Upscale.
+
+## Bất thường trong log chưa giải thích hết
+- **06/11 10:18 đến 10:23, job smoke 880x880 mất 318,6 s**: hiện cùng ảnh chạy 2,5 s qua `UpscaleService` (hai lần liên tiếp, cùng `config.toml`). Chưa tái hiện được 318 s, nên nguyên nhân chưa biết (nghi tranh chấp GPU lúc đó, chưa xác nhận).
+- **06/11 15:34, job ảnh `01a19a93-....png` (1672x941) không có dòng "xong" hay "lỗi"**: file tạm `.01a19a93-...x4.ae6fce24.tmp.png` còn nằm trong `Downloads`, đọc được đủ 6688x3764, sửa lần cuối 15:34:53. Nghĩa là engine chạy xong sau khoảng 38 s rồi tiến trình app dừng trước khi đổi tên và ghi log. Chưa xác định vì sao (nghi app bị đóng đột ngột). File này có thể chính là kết quả hoàn chỉnh; tôi **không xóa**. App hiện chưa dọn file tạm mồ côi khi khởi động (ghi vào backlog).

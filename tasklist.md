@@ -1,85 +1,86 @@
 # UpScale - Tasklist
 
-**Cập nhật**: lần đầu, tạo từ rà soát thư mục. Nguồn: `docs/PRD.md`, `docs/SPRINT-1.md`, `docs/DECISIONS.md`, `docs/ARCHITECTURE.md`, mã trong `src/` và `tests/`.
-**Quy ước**: `[x]` đã xác minh bằng lệnh/test, `[~]` có mã nhưng chưa nghiệm thu, `[ ]` chưa làm.
+**Cập nhật**: 06/11/2026, sau phiên rà soát và kiểm tra bằng engine thật. Nguồn: `docs/PRD.md`, `docs/SPRINT-1.md`, `docs/DECISIONS.md` (D-04, D-05 và mục "Nghiệm thu Sprint 1"), mã trong `src/` và `tests/`.
+**Quy ước**: `[x]` đã xác minh bằng lệnh/test, `[~]` làm một phần hoặc chỉ có bằng chứng gián tiếp, `[ ]` chưa làm.
 **Quy tắc agent**: xem `.clinerules`. Trước mỗi task, đọc file agent ghi ở cột "Agent" (đường dẫn tính từ `.agency-agents/`). Không sửa file trong `.agency-agents/`.
 
 ## Sprint Goal (Sprint 1)
 Chạy app, chọn ảnh, Upscale 2x/4x khi ngắt mạng, nhận ảnh lưu cạnh file gốc. Tiêu chí: bộ 5 ảnh test (có 1 ảnh lớn) chạy 5/5, không crash, không mạng.
 
 ## Hiện trạng đã xác minh
-- [x] `.venv/Scripts/python.exe -W error::ResourceWarning -m unittest discover -s tests -t .` (Python 3.11.9): 65 test đạt.
-- [x] `python -m compileall src tests run.py` không lỗi.
-- [x] `ruff check src tests run.py` (ruff 0.17.4): All checks passed.
-- [x] Không có TODO/FIXME/placeholder trong `src/`; không import thư viện mạng (`socket`, `urllib`, `requests`, `http`) trong `src/`.
-- [x] Git: đã `git init`, nhánh `main` theo dõi `origin/main` (https://github.com/nhieudo71/UpScale.git). Chưa commit hay push.
-- Chưa xác minh: chạy GUI thật, offline thật, bộ 5 ảnh, build `.exe`, CI trên GitHub.
+- [x] 68 test đạt: `.venv/Scripts/python.exe -W error::ResourceWarning -m unittest discover -s tests -t .` (Python 3.11.9).
+- [x] `ruff check src tests run.py` (ruff 0.17.4): All checks passed. `compileall` không lỗi.
+- [x] Engine thật + `UpscaleService`, 5 ảnh (có 1 ảnh 3000x2000): 5/5 đúng kích thước, file gốc không đổi, không ghi đè. Chi tiết ở `docs/DECISIONS.md`.
+- [x] Không có kết nối mạng thấy được lúc chạy (socket Python bị chặn, 0 lần thử; lấy mẫu TCP/UDP của tiến trình engine, 0 kết nối). Đây chưa phải thử ngắt mạng thật.
+- [x] `python run.py` sống sau 8 giây. `pyinstaller UpScale.spec` build được và `scripts/smoke_exe.ps1` đạt. Đã xóa `build/` và `dist/` sau khi thử.
+- [x] Git: nhánh `chore/initial-import` đã push lên origin. `main` chưa bị đụng.
+- Chưa xác minh: thao tác GUI bằng tay, ngắt Wi-Fi thật, ảnh chụp thật nhiều chi tiết, CI trên GitHub (chưa có PR).
 
-## Vấn đề phát hiện (cần xử lý)
-| # | Vấn đề | Bằng chứng | Hành động |
-|---|--------|------------|-----------|
-| P1 | ~~`.venv` dùng Python 3.14.6, chưa cài thư viện~~ **Đã xử lý (T-01)**: tạo lại bằng Python 3.11.9, cài `requirements-dev.txt` | Test, ruff, compileall đều đạt | - |
-| P2 | `README.md` ở remote chỉ có 2 dòng mô tả, chưa có hướng dẫn cài và chạy như Definition of Done yêu cầu | `git show origin/main:README.md` | Task T-08 (viết lại, giữ dòng mô tả hiện có) |
-| P3 | ~~Thư mục chưa phải git repo~~ **Đã xử lý**: `git init`, gắn `origin`, `main` theo dõi `origin/main`. Còn lại: chưa commit, CI chưa chạy lần nào | `git status -sb` | Chờ người dùng cho phép commit và push (xem T-10) |
-| P4 | `logs/app.log` chỉ có 1 job hoàn tất (smoke, 880x880) mất 318.640 ms, trong khi D-01 đo 5 s cho ảnh tương tự | Log 10:18 đến 10:23 | Điều tra: đo lại, kiểm tra có chạy nhầm GPU 0 (Intel) hay app đang mở song song |
-| P5 | Job lúc 15:34 (ảnh trong Downloads) có dòng "Chạy engine" nhưng không có dòng "xong" hay "lỗi" | Cuối `logs/app.log` | Xác nhận do đóng app/hủy hay do treo; nếu đóng app mà không ghi log thì sửa |
-| P6 | Ngày trong docs ghi `11/06/2026`, ngày file và log là 06/11/2026 | Timestamp file | Thống nhất định dạng ngày |
+## Vấn đề phát hiện
+| # | Vấn đề | Trạng thái |
+|---|--------|-----------|
+| P1 | `.venv` dùng Python 3.14.6 | **Đã xử lý (T-01)**: tạo lại bằng 3.11.9 |
+| P2 | README chỉ có 2 dòng | **Đã xử lý (T-08)**: viết lại, giữ dòng mô tả gốc |
+| P3 | Chưa là git repo | **Đã xử lý**: `git init`, commit, push nhánh `chore/initial-import` |
+| P4 | Job smoke 06/11 10:18 mất 318,6 s | **Chưa giải thích được**: cùng ảnh nay chạy 2,5 s qua service, hai lần liên tiếp. Nghi tranh chấp GPU lúc đó, chưa xác nhận. Xem `docs/DECISIONS.md` |
+| P5 | Job 15:34 (Downloads) không có dòng "xong"/"lỗi", file tạm `.01a19a93-...tmp.png` còn lại | **Chưa giải thích hết**: engine đã chạy xong (file tạm đọc được 6688x3764) rồi app dừng trước khi đổi tên. Tôi không xóa file này. Cần bạn xem lại hôm đó có đóng app giữa chừng không |
+| P6 | Docs ghi ngày `11/06/2026`, file và log là 06/11/2026 | Chưa đổi, cần bạn cho biết định dạng ngày muốn dùng (docs có thể đang theo dd/mm hoặc mm/dd) |
+| P7 | **Engine crash khi đường dẫn đầu ra có Unicode** (vd `_ĐẢNG`), log 17:39 | **Đã sửa (D-04)**, có test và đã thử lại bằng engine thật |
+| P8 | **`-s 2` cho ảnh sai nội dung** (tile bị lặp), dù đúng kích thước | **Đã sửa (D-05)**: 2x = chạy 4x rồi thu nhỏ. Có test; đã thử bằng engine thật |
+| P9 | Khi app bị tắt giữa job, file tạm `.<tên>_x4.<job>.tmp.png` mồ côi (có thể hàng chục MB) | Chưa sửa, ghi vào Backlog |
 
 ## Sprint 1 - Cam kết (13 điểm)
 
 | ID | Story | Điểm | Trạng thái | Agent |
 |----|-------|------|-----------|-------|
-| US-01 | Engine chạy được | 3 | [~] Spike xong (D-01). Còn: kiểm tra giấy phép file model | `engineering/engineering-senior-developer.md` |
-| US-02 | Upscale qua giao diện | 5 | [~] Có mã `ui/`, 65 test. Chưa nghiệm thu thủ công | `engineering/engineering-desktop-app-engineer.md`, `design/design-ui-designer.md` |
-| US-04 | Ảnh lớn | 2 | [~] Đã đo tới 192 MP, `max_output_pixels=150000000`. Chưa thử ảnh chụp thật | `testing/testing-performance-benchmarker.md` |
-| US-05 | Lỗi dễ hiểu | 2 | [~] Có mã lỗi và test các nhánh. Chưa thử tay trên GUI | `engineering/engineering-code-reviewer.md` |
-| US-03 | Offline | 1 | [~] Mã không gọi mạng. Chưa thử ngắt mạng thật | `testing/testing-reality-checker.md` |
+| US-01 | Engine chạy được | 3 | [x] Chạy thật trên RTX 3050. Giấy phép: MIT (ncnn-vulkan) và BSD 3-Clause (Real-ESRGAN) đã đối chiếu; giấy phép riêng của file model chưa xác nhận | `engineering/engineering-senior-developer.md` |
+| US-02 | Upscale qua giao diện | 5 | [~] Luồng service chạy đúng bằng engine thật, 68 test (gồm test cửa sổ Tk). Chưa ai thao tác GUI bằng tay | `engineering/engineering-desktop-app-engineer.md`, `design/design-ui-designer.md` |
+| US-04 | Ảnh lớn | 2 | [~] Ảnh 3000x2000 chạy 2x và 4x được (~66 s). Chưa thử ảnh chụp thật | `testing/testing-performance-benchmarker.md` |
+| US-05 | Lỗi dễ hiểu | 2 | [~] Có mã lỗi và test từng nhánh. Chưa thử tay trên GUI | `engineering/engineering-code-reviewer.md` |
+| US-03 | Offline | 1 | [~] Bằng chứng gián tiếp (0 kết nối). Chưa tắt Wi-Fi thật | `testing/testing-reality-checker.md` |
 
-### Task còn lại để đóng Sprint 1
-- [x] **T-01 Sửa môi trường (P1)**: venv Python 3.11.9, cài `requirements-dev.txt`, `ruff check` sạch, 65 test đạt.
-  - Agent: `engineering/engineering-developer-tooling-engineer.md`
-- [ ] **T-10 Commit đầu tiên và push (P3)**: chọn file đưa vào repo, tạo nhánh mới, mở PR để CI chạy.
-  - Cần người dùng quyết: có đưa `.agency-agents/` (5,7 MB) vào repo không; `.gitignore` đã loại `engine/`, `config.toml`, `.env`, `logs/`, `.venv/`.
-  - Agent: `engineering/engineering-git-workflow-master.md`
-- [ ] **T-02 Điều tra P4, P5**: chạy lại một job 4x ảnh 220x220 qua app, so với 5 s của D-01; xem log job 15:34.
-  - Xong khi: nguyên nhân được ghi vào `docs/DECISIONS.md`.
-  - Agent: `engineering/engineering-minimal-change-engineer.md` nếu cần sửa mã.
-- [ ] **T-03 Nghiệm thu giao diện** theo checklist demo bên dưới (chạy `python run.py`).
+### Task
+- [x] **T-01 Môi trường**: venv 3.11.9, thư viện, ruff sạch.
+- [x] **T-10 Commit đầu và push**: commit `Import UpScale Sprint 1 codebase` lên nhánh `chore/initial-import`, tác giả `nhieudo71 <nhieudo71@gmail.com>`. Máy chưa cài `gh` nên chưa mở PR. Mở bằng link: https://github.com/nhieudo71/UpScale/pull/new/chore/initial-import
+- [x] **T-02 Điều tra log**: tìm ra P7, P8. P4 và P5 chỉ giải thích được một phần (xem bảng trên).
+- [~] **T-04 Bộ 5 ảnh**: chạy 5/5 bằng engine thật, nhưng 4 trong 5 ảnh là ảnh mẫu của engine hoặc ảnh tổng hợp, và 2x của 4 ảnh đó chưa đo lại sau D-05. Còn cần ảnh chụp thật của bạn.
+- [~] **T-05 Offline**: xem trên. Còn cần tắt Wi-Fi thật rồi chạy.
+- [~] **T-06 Giấy phép model**: license mã nguồn đã đối chiếu. File model chưa có license riêng được xác nhận (README của engine không nói).
+- [x] **T-07 Chất lượng bằng mắt**: đã xem 2 ảnh mẫu. Với 2x, hai model cho PSNR gần nhau (29,7 đến 33,0 dB), không thấy model nào hơn hẳn; model ảnh thật vẫn là mặc định. Chỉ dựa trên 2 ảnh, chưa phải kết luận chắc.
+- [x] **T-08 README.md**: cài, chạy, cấu hình, phát triển, giấy phép. Dòng "xóa nền miễn phí" của bạn được giữ, kèm ghi chú rằng chưa có trong mã.
+- [ ] **T-03 Nghiệm thu GUI bằng tay** (cần bạn): chạy `run.bat`, đi hết checklist demo bên dưới.
   - Agent: `testing/testing-evidence-collector.md`
-- [ ] **T-04 Bộ ảnh test 5 ảnh** (gồm 1 ảnh lớn, nên có ảnh chụp thật), chạy 5/5 và ghi thời gian vào `docs/DECISIONS.md`.
-  - Agent: `testing/testing-test-automation-engineer.md`
-- [ ] **T-05 Thử offline thật** (US-03): tắt Wi-Fi, chạy bộ ảnh.
-- [ ] **T-06 Giấy phép model** (câu hỏi mở cuối của PRD): kiểm tra giấy phép riêng của file model Real-ESRGAN, ghi vào D-01.
-- [ ] **T-07 Chất lượng bằng mắt**: so `realesrgan-x4plus -s 2` với model anime, chọn model 2x mặc định.
-- [ ] **T-08 Viết `README.md`**: cài, chạy, chép `engine/realesrgan`, cấu hình `config.toml`.
-  - Agent: `engineering/engineering-technical-writer.md`
-- [ ] **T-09 Kiểm tra trước bàn giao**: chạy toàn bộ test, rà TODO, đối chiếu Acceptance Criteria của US-01 đến US-05.
+- [ ] **T-09 Kiểm tra trước bàn giao**: làm sau T-03, T-04, T-05.
   - Agent: `testing/testing-reality-checker.md`
 
-### Checklist demo cuối sprint
+### Checklist demo cuối sprint (cần bạn làm trên máy)
 - [ ] Mở app, chọn ảnh, thấy kích thước gốc.
 - [ ] Upscale 2x và 4x, kích thước ảnh kết quả đúng.
 - [ ] Giao diện không đơ khi đang xử lý.
-- [ ] Ngắt mạng, vẫn upscale được.
+- [ ] Tắt Wi-Fi, vẫn upscale được.
 - [ ] Ảnh lớn không làm crash.
 - [ ] Chọn file không phải ảnh, thấy thông báo lỗi dễ hiểu.
 - [ ] File gốc không bị đổi, file đích không bị ghi đè.
+- [ ] Ảnh trong thư mục có dấu (vd `_ĐẢNG`) chạy được.
 
-## Stretch (chỉ làm khi cam kết xong)
-- [~] **US-06 Chọn model Ảnh thật / Anime** (2 điểm): `domain/models.py` có hai model, UI có thứ tự Tab cho chọn model. Cần xác nhận log ghi đúng model.
-- [ ] **US-08 Xem trước và sau** (3 điểm): chưa thấy mã.
+## Stretch
+- [~] **US-06 Chọn model Ảnh thật / Anime** (2 điểm): có trong `domain/models.py` và UI; hai model đã chạy được bằng engine thật ở 2x. Chưa thử tay trên GUI.
+- [ ] **US-08 Xem trước và sau** (3 điểm): chưa có mã.
   - Agent: `design/design-ux-architect.md`
 
 ## Sprint 2 (dự kiến)
-- [ ] **US-07 Xử lý cả thư mục** (5 điểm): thêm `start_batch` theo `docs/ARCHITECTURE.md` mục 3.3.
+- [ ] **US-07 Xử lý cả thư mục** (5 điểm): `start_batch` theo `docs/ARCHITECTURE.md` mục 3.3.
   - Agent: `engineering/engineering-backend-architect.md`
-- [ ] **Đóng gói**: `UpScale.spec`, `scripts/smoke_exe.ps1` và `.github/workflows/ci.yml` đã có; chưa build thử. Cần git repo (P3) để CI chạy.
+- [~] **Đóng gói**: build `.exe` và smoke test đạt trên máy này. Còn thiếu: chạy CI trên GitHub (cần mở PR) và thử `.exe` với engine thật.
   - Agent: `engineering/engineering-devops-automator.md`
 
-## Backlog (chờ người dùng quyết)
+## Backlog (chờ bạn quyết)
+- Dọn file tạm mồ côi khi khởi động app (P9). Cần quyết: dọn tự động, hay chỉ báo.
+- Tính năng "xóa nền": dòng mô tả của repo có nói tới, PRD và mã chưa có. Cần quyết: làm hay bỏ khỏi mô tả.
 - SQLite lịch sử xử lý: đang là Non-Goal, cần đổi PRD trước.
 - REST API cục bộ: chỉ có thiết kế (`ARCHITECTURE.md` 3.4).
 - Định dạng ảnh ngoài PNG/JPG (WebP, BMP).
+- Thêm file LICENSE cho repo.
 - Rà bảo mật mã sinh bởi AI: `security/security-ai-generated-code-auditor.md`.
 
 ## Bảng chọn agent nhanh

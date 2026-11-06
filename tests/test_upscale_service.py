@@ -109,6 +109,31 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(os.listdir(self.dir), ["cat.png"])
         self.assertEqual(self._run(svc, UpscaleRequest(str(self.src)))[-1].type, EventType.DONE)
 
+    def test_2x_runs_engine_at_4x_then_downscales(self) -> None:
+        events = self._run(self._service(), UpscaleRequest(str(self.src), scale=2), mode="x4only")
+        self.assertEqual(events[-1].type, EventType.DONE)
+        self.assertEqual((events[-1].output_w, events[-1].output_h), (20, 16))
+        with Image.open(events[-1].output_path) as out:
+            self.assertEqual(out.size, (20, 16))
+        self.assertEqual(sorted(os.listdir(self.dir)), ["cat.png", "cat_x2.png"])
+
+    def test_2x_blocked_when_intermediate_4x_exceeds_limit(self) -> None:
+        # Ảnh 10x8: 2x = 320 điểm (qua), 4x = 1280 điểm (vượt 500).
+        last = self._run(self._service(max_output_pixels=500), UpscaleRequest(str(self.src), scale=2))[-1]
+        self.assertEqual(last.code, ErrorCode.OUTPUT_TOO_LARGE)
+        self.assertEqual(os.listdir(self.dir), ["cat.png"])
+
+    def test_non_ascii_source_folder_still_works(self) -> None:
+        # Engine thật crash khi đường dẫn đầu ra có ký tự Unicode (vd thư mục "_ĐẢNG"), nên service
+        # phải cho engine ghi vào đường dẫn ASCII rồi mới chuyển kết quả về cạnh ảnh gốc.
+        folder = self.dir / "Đảng"
+        folder.mkdir()
+        src = folder / "ảnh.png"
+        Image.new("RGB", (10, 8), (10, 200, 10)).save(src)
+        last = self._run(self._service(), UpscaleRequest(str(src), scale=4), mode="asciionly")[-1]
+        self.assertEqual(last.type, EventType.DONE)
+        self.assertEqual(sorted(os.listdir(folder)), ["ảnh.png", "ảnh_x4.png"])
+
     def test_callback_exception_does_not_break_job(self) -> None:
         svc = self._service()
         with mock.patch.dict(os.environ, {"FAKE_MODE": "ok"}):
