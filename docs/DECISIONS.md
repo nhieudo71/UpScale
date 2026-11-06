@@ -144,3 +144,35 @@ Cả 5 ảnh đều đúng kích thước, file gốc không đổi (so SHA256),
 ## Bất thường trong log chưa giải thích hết
 - **06/11 10:18 đến 10:23, job smoke 880x880 mất 318,6 s**: hiện cùng ảnh chạy 2,5 s qua `UpscaleService` (hai lần liên tiếp, cùng `config.toml`). Chưa tái hiện được 318 s, nên nguyên nhân chưa biết (nghi tranh chấp GPU lúc đó, chưa xác nhận).
 - **06/11 15:34, job ảnh `01a19a93-....png` (1672x941) không có dòng "xong" hay "lỗi"**: file tạm `.01a19a93-...x4.ae6fce24.tmp.png` còn nằm trong `Downloads`, đọc được đủ 6688x3764, sửa lần cuối 15:34:53. Nghĩa là engine chạy xong sau khoảng 38 s rồi tiến trình app dừng trước khi đổi tên và ghi log. Chưa xác định vì sao (nghi app bị đóng đột ngột). File này có thể chính là kết quả hoàn chỉnh; tôi **không xóa**. App hiện chưa dọn file tạm mồ côi khi khởi động (ghi vào backlog).
+
+## D-06: Xóa nền ảnh bằng U²-Net qua onnxruntime, module `bgremoval` độc lập (06/11/2026)
+**Phạm vi**: PRD ghi "chỉnh sửa ảnh" trong Non-Goals. Tính năng này do người dùng yêu cầu trực tiếp, nên là mở rộng phạm vi có chủ đích, chưa sửa PRD.
+
+**Vị trí và ranh giới**: `src/upscale/bgremoval/` là gói riêng, cùng dạng với `UpscaleService` để dùng lại `EventBridge`, thanh tiến độ, hộp thoại hủy và `UpscaleError`. Nó chỉ import `domain` và `infra` (cho `JobEvent`, `ErrorCode`, `Config`, `inspect_image`, `check_output_limit`). `UpscaleService`, `engine_runner` và `domain` không bị sửa. Chỗ nối duy nhất là `ui/app.py` (thêm công tắc "Phóng to / Xóa nền") và một hàm `bg_done_notice` trong `ui/presenter.py`.
+| File | Việc |
+|---|---|
+| `matting.py` | Tiền xử lý 320x320, đổi đầu ra model thành mặt nạ, ghép alpha. Không I/O |
+| `session.py` | Duy nhất biết về onnxruntime. Kiểm SHA256 file model rồi mới nạp |
+| `rules.py` | Đặt tên `<tên>_nobg.png`, không ghi đè |
+| `service.py` | Điều phối một job, phát `JobEvent`, hủy giữa các bước |
+
+**Chọn model** (đo trên CPU, cùng bước tiền xử lý, cùng ảnh):
+| Ảnh | u2netp (4,6 MB) | silueta (44 MB) | u2net (176 MB) |
+|---|---|---|---|
+| Ảnh người (girl-1) | xóa sót, vùng chân bị mờ | tốt | tốt |
+| Hổ, ô tô | gần như tương đương | tương đương | tương đương |
+| Ảnh anime 220x220 | viền nhòe, nhiều vùng alpha lưng chừng | 85% alpha lưng chừng | 76% alpha lưng chừng |
+Chọn **u2net** làm mặc định vì không kém model nào trên ảnh thật và cho viền tốt nhất trên ảnh người. Tốc độ đo trên CPU: 0,16 đến 0,5 s cho ảnh nhỏ sau lần nạp đầu (nạp model và tính SHA256 mất khoảng 1,6 đến 2,2 s ở job đầu), 6000x4000 mất 7,3 đến 9,1 s.
+
+**Hạn chế đã thấy, chưa khắc phục**
+- Ảnh anime/vẽ tay có nền phẳng: cả ba model đều cho mặt nạ mềm (76 đến 85% điểm ảnh có alpha lưng chừng), nên nền không bị xóa sạch. U²-Net học từ ảnh thật và đối tượng nổi bật, không phải ảnh vẽ. Chỉ đo trên một ảnh anime.
+- Mặt nạ chạy ở 320x320 rồi phóng lên, nên với ảnh lớn đường viền mềm và có thể ăn vào hoặc lố ra vài điểm ảnh (thấy ở viền chân hổ: có vệt hồng nhạt khi ghép lên nền hồng đậm). Không có bước làm sắc viền (alpha matting).
+- Chưa có quy tắc ngưỡng: kết quả là alpha liên tục, không nhị phân hóa.
+
+**Giấy phép**: mã U-2-Net là Apache 2.0 (đã đối chiếu file LICENSE trên GitHub). File `u2net.onnx` tải từ rembg release v0.0.0, giấy phép riêng của file trọng số này **chưa được xác nhận**.
+
+**Nguồn và hash** (hash do tôi tính sau khi tải, không có hash công bố để đối chiếu): `u2net.onnx`, 175.997.641 byte, SHA256 `8D10D2F3BB75AE3B6D527C77944FC5E7DCD94B29809D47A739A7A728A912B491`. Service từ chối nạp file khác hash này.
+
+**Phụ thuộc mới**: `numpy==2.4.6`, `onnxruntime==1.31.1` (chỉ CPUExecutionProvider, không GPU). Build PyInstaller bản có hai thư viện này tăng `dist/UpScale` lên 108 MB. Smoke test `.exe` đạt, nhưng **chưa thử xóa nền trong `.exe`** (cần model đặt cạnh exe).
+
+**Chưa kiểm chứng**: GUI ở chế độ xóa nền chưa ai thao tác bằng tay; chưa thử trên máy không có AVX hoặc CPU rất cũ; chưa đo bộ nhớ đỉnh với ảnh rất lớn.

@@ -32,6 +32,17 @@ hoặc `.venv\Scripts\python.exe run.py`. Log nằm ở `logs\app.log`.
 ## Cấu hình
 Chép `config.example.toml` thành `config.toml` cạnh `run.py` rồi sửa. Quan trọng nhất là `gpu_id`: máy có card onboard và card rời thì card rời thường là `1` (xem dòng `[1 NVIDIA ...]` trong `logs\app.log`). Xóa `config.toml` thì app dùng giá trị mặc định. Ý nghĩa từng khóa nằm trong file mẫu.
 
+## Xóa nền
+Chọn "Xóa nền" cạnh nút "Chọn ảnh", rồi bấm "Xóa nền". Kết quả là `<tên>_nobg.png` có nền trong suốt, lưu cạnh ảnh gốc. Chạy trên CPU, không cần GPU và không cần mạng.
+
+Model không nằm trong repo. Tải `u2net.onnx` (176 MB) từ [rembg releases](https://github.com/danielgatis/rembg/releases/tag/v0.0.0) và đặt vào `engine\background\u2net.onnx`. App kiểm SHA256 của file và từ chối file khác bản đã kiểm tra:
+```
+SHA256 8D10D2F3BB75AE3B6D527C77944FC5E7DCD94B29809D47A739A7A728A912B491
+```
+Lệnh kiểm tra: `certutil -hashfile engine\background\u2net.onnx SHA256`. Chưa có model thì chế độ "Phóng to" vẫn chạy bình thường, chế độ "Xóa nền" báo thiếu model.
+
+Hạn chế: kết quả tốt với ảnh chụp người, vật, động vật; kém với ảnh anime hoặc tranh vẽ có nền phẳng (nền không sạch hẳn); viền hơi mềm vì mặt nạ tính ở độ phân giải thấp. Chi tiết ở `docs/DECISIONS.md`, D-06.
+
 ## Cần biết
 - 2x chạy engine ở 4x rồi thu nhỏ về 2x, vì `-s 2` của engine cho ảnh sai nội dung (xem `docs/DECISIONS.md`, D-05). Do đó 2x tốn thời gian và VRAM như 4x.
 - Ảnh có kết quả quá lớn (mặc định hơn 150 megapixel, tính ở 4x) bị chặn trước khi chạy.

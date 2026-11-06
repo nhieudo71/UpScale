@@ -15,12 +15,22 @@ from tkinter import TclError, filedialog
 import customtkinter as ctk
 
 from ..domain.models import DEFAULT_MODEL, MODELS, ErrorCode, EventType, ImageInfo, JobEvent, UpscaleError, UpscaleRequest
+from ..bgremoval.service import BackgroundRemovalService
 from ..domain.rules import check_output_limit
 from ..infra.config import Config, load_config
 from ..infra.logging_setup import setup_logging
 from ..services.upscale_service import UpscaleService
 from .event_bridge import EventBridge
-from .presenter import SCALE_OPTIONS, Action, Notice, NoticeKind, describe_scale, done_notice, notice_for_error
+from .presenter import (
+    SCALE_OPTIONS,
+    Action,
+    Notice,
+    NoticeKind,
+    bg_done_notice,
+    describe_scale,
+    done_notice,
+    notice_for_error,
+)
 from .theme import RADIUS_LG, SPACE, WINDOW_DEFAULT, WINDOW_MIN, color, font
 from .views import ConfirmCancelDialog, NoticeCard, PathField, ProgressRow
 from .widgets import AppButton, Segmented
@@ -43,6 +53,13 @@ VISIBLE: dict[State, frozenset[str]] = {
     State.S2: frozenset({"pick", "info", "options", "actions", "progress"}),
     State.S3: frozenset({"info", "result"}),
     State.M1: frozenset(),
+}
+
+MODE_UPSCALE, MODE_BG = "upscale", "bg"
+MODE_OPTIONS = ((MODE_UPSCALE, "Phóng to"), (MODE_BG, "Xóa nền"))
+HINTS = {
+    MODE_UPSCALE: "Chọn một ảnh PNG hoặc JPG để phóng to. Ảnh gốc không bị thay đổi.",
+    MODE_BG: "Chọn một ảnh PNG hoặc JPG để xóa nền. Ảnh gốc không bị thay đổi.",
 }
 
 
@@ -77,10 +94,13 @@ class App(ctk.CTk):
         service: UpscaleService | None = None,
         ask_open_file: Callable[[], str] = ask_image_path,
         open_path: Callable[[Path], None] = open_in_shell,
+        bg_service: BackgroundRemovalService | None = None,
     ) -> None:
         super().__init__(fg_color=color("bg"))
         self._config = config
         self._service = service or UpscaleService(config)
+        self._bg_service = bg_service or BackgroundRemovalService(config)
+        self._job_service: UpscaleService | BackgroundRemovalService = self._service  # service của job đang chạy
         self._ask_open_file = ask_open_file
         self._open_path = open_path
         self._state = State.S0
@@ -128,10 +148,13 @@ class App(ctk.CTk):
         self._card = card
         # Thứ tự tạo widget quyết định thứ tự Tab: Chọn ảnh, 2x, 4x, model, Upscale, Hủy, Mở thư mục.
         self._sections["hint"] = ctk.CTkLabel(
-            card, text="Chọn một ảnh PNG hoặc JPG để phóng to. Ảnh gốc không bị thay đổi.",
-            font=font("body"), text_color=color("text"), anchor="w")
-        self._pick_button = AppButton(card, "Chọn ảnh", self._pick, "secondary", width=160)
-        self._sections["pick"] = self._pick_button
+            card, text=HINTS[MODE_UPSCALE], font=font("body"), text_color=color("text"), anchor="w")
+        pick_row = ctk.CTkFrame(card, fg_color="transparent")
+        self._pick_button = AppButton(pick_row, "Chọn ảnh", self._pick, "secondary", width=160)
+        self._pick_button.pack(side="left")
+        self._mode_seg = Segmented(pick_row, list(MODE_OPTIONS), MODE_UPSCALE, self._on_mode_changed)
+        self._mode_seg.pack(side="left", padx=(SPACE[5], 0))
+        self._sections["pick"] = pick_row
 
         info = ctk.CTkFrame(card, fg_color="transparent")
         info.columnconfigure(0, weight=1)
@@ -195,9 +218,27 @@ class App(ctk.CTk):
     def _scale(self) -> int:
         return int(self._scale_seg.value)
 
+    def _mode(self) -> str:
+        return self._mode_seg.value
+
+    def _visible(self, state: State) -> frozenset[str]:
+        """Xóa nền không có hệ số hay loại ảnh nên ẩn phần tùy chọn."""
+        visible = VISIBLE[state]
+        return visible - {"options"} if self._mode() == MODE_BG else visible
+
+    def _action_label(self) -> str:
+        return "Xóa nền" if self._mode() == MODE_BG else "Upscale"
+
+    def _on_mode_changed(self, _key: str) -> None:
+        self._show_notice(None)
+        self._layout(self._visible(self._state))
+        self._sections["hint"].configure(text=HINTS[self._mode()])
+        self._upscale_button.set_enabled(self._state is not State.S2, self._action_label())
+        self._update_dims()
+
     def _set_state(self, state: State) -> None:
         self._state = state
-        visible = VISIBLE[state]
+        visible = self._visible(state)
         if visible:
             self._card.grid()
         else:
@@ -207,7 +248,8 @@ class App(ctk.CTk):
         self._pick_button.set_enabled(not busy)
         self._scale_seg.set_enabled(not busy)
         self._model_seg.set_enabled(not busy)
-        self._upscale_button.set_enabled(not busy, "Đang xử lý..." if busy else "Upscale")
+        self._mode_seg.set_enabled(not busy)
+        self._upscale_button.set_enabled(not busy, "Đang xử lý..." if busy else self._action_label())
         if busy:
             self._cancel_button.set_enabled(True, "Hủy")
             self._cancel_button.pack(side="left", padx=(SPACE[3], 0))
@@ -234,7 +276,11 @@ class App(ctk.CTk):
                 log.debug("Không đặt được focus cho %s", state)
 
     def _update_dims(self) -> None:
-        if self._image is not None:
+        if self._image is None:
+            return
+        if self._mode() == MODE_BG:
+            self._dims_label.configure(text=f"{self._image.width} x {self._image.height}")
+        else:
             self._dims_label.configure(text=describe_scale(self._image, self._scale()))
 
     def _show_notice(self, notice: Notice | None) -> None:
@@ -265,7 +311,8 @@ class App(ctk.CTk):
 
     def _fail(self, code: ErrorCode, message: str | None) -> None:
         self._job_id = None
-        self._show_notice(notice_for_error(code, message, self._scale()))
+        # Xóa nền không có hệ số, nên truyền 2 để thẻ lỗi không gợi ý nút "Chọn 2x".
+        self._show_notice(notice_for_error(code, message, 2 if self._mode() == MODE_BG else self._scale()))
         self._set_state(State.S1)
 
     # ---- Hành động của người dùng ----
@@ -293,21 +340,29 @@ class App(ctk.CTk):
     def _start(self) -> None:
         if self._state is not State.S1 or self._image is None:
             return
+        remove_bg = self._mode() == MODE_BG
         scale = self._scale()
-        try:
-            # E2: chặn trước khi chạy, ở lại S1.
-            check_output_limit(self._image.width, self._image.height, scale, self._config.max_output_pixels)
-        except UpscaleError as exc:
-            self._fail(exc.code, exc.message)
-            return
-        request = UpscaleRequest(self._image.path, scale=scale, model=self._model_seg.value)
+        if not remove_bg:
+            try:
+                # E2: chặn trước khi chạy, ở lại S1. Xóa nền tự kiểm tra giới hạn trong service.
+                check_output_limit(self._image.width, self._image.height, scale, self._config.max_output_pixels)
+            except UpscaleError as exc:
+                self._fail(exc.code, exc.message)
+                return
         self._show_notice(None)
         self._set_state(State.S2)
         self._progress.show_starting()
         try:
-            self._job_id = self._service.start(request, self._bridge.push)
+            if remove_bg:
+                self._job_service = self._bg_service
+                self._job_id = self._bg_service.start(self._image.path, self._bridge.push)
+            else:
+                request = UpscaleRequest(self._image.path, scale=scale, model=self._model_seg.value)
+                self._job_service = self._service
+                self._job_id = self._service.start(request, self._bridge.push)
         except UpscaleError as exc:
             self._fail(exc.code, exc.message)
+
     def _ask_cancel(self) -> None:
         """Esc và nút Hủy: mở hộp thoại xác nhận. Ngoài S2 hoặc khi hộp thoại đang mở thì không làm gì."""
         if self._state is not State.S2 or self._dialog is not None:
@@ -317,7 +372,7 @@ class App(ctk.CTk):
     def _confirm_cancel(self) -> None:
         # Job có thể đã xong trong lúc hộp thoại mở; khi đó sự kiện done/failed đã đưa app ra khỏi S2.
         if self._state is State.S2 and self._job_id is not None:
-            self._service.cancel(self._job_id)
+            self._job_service.cancel(self._job_id)
             self._progress.show_starting()
             self._cancel_button.set_enabled(False, "Đang hủy...")
 
@@ -350,10 +405,13 @@ class App(ctk.CTk):
             return
         self._output_path = event.output_path
         self._result_path.set_path(event.output_path)
-        self._show_notice(done_notice(
-            self._image.path, event.output_path, self._scale(),
-            event.output_w or 0, event.output_h or 0, event.duration_ms or 0,
-        ))
+        if self._mode() == MODE_BG:
+            notice = bg_done_notice(self._image.path, event.output_path, event.output_w or 0,
+                                    event.output_h or 0, event.duration_ms or 0)
+        else:
+            notice = done_notice(self._image.path, event.output_path, self._scale(),
+                                 event.output_w or 0, event.output_h or 0, event.duration_ms or 0)
+        self._show_notice(notice)
         self._set_state(State.S3)
 
     # ---- Hành động trên thẻ thông báo và màn hình kết quả ----
@@ -388,6 +446,7 @@ class App(ctk.CTk):
         self._bridge.close()
         try:
             self._service.shutdown()
+            self._bg_service.shutdown()
         finally:
             self.destroy()
 

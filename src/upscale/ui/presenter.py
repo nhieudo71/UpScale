@@ -103,6 +103,13 @@ def was_renamed(source: str, output: str, scale: int) -> bool:
     return Path(output).name != f"{Path(source).stem}_x{scale}.png"
 
 
+def bg_done_notice(source: str, output: str, out_w: int, out_h: int, duration_ms: int) -> Notice:
+    body = f"Thời gian xử lý: {format_duration(duration_ms)}. Ảnh PNG có nền trong suốt."
+    if Path(output).name != f"{Path(source).stem}_nobg.png":
+        body += f" Đã có file cùng tên, ảnh được lưu thành {Path(output).name}."
+    return Notice(NoticeKind.SUCCESS, f"Đã lưu ảnh {out_w} x {out_h} không nền", body)
+
+
 def done_notice(source: str, output: str, scale: int, out_w: int, out_h: int, duration_ms: int) -> Notice:
     body = f"Thời gian xử lý: {format_duration(duration_ms)}."
     if was_renamed(source, output, scale):

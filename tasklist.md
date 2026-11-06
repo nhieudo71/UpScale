@@ -76,7 +76,7 @@ Chạy app, chọn ảnh, Upscale 2x/4x khi ngắt mạng, nhận ảnh lưu c�
 
 ## Backlog (chờ bạn quyết)
 - Dọn file tạm mồ côi khi khởi động app (P9). Cần quyết: dọn tự động, hay chỉ báo.
-- Tính năng "xóa nền": dòng mô tả của repo có nói tới, PRD và mã chưa có. Cần quyết: làm hay bỏ khỏi mô tả.
+- ~~Tính năng "xóa nền"~~ **Đã có mã (D-06)**: module `src/upscale/bgremoval/`, 33 test mới, 101 test toàn bộ. Còn lại: thao tác GUI bằng tay, xác nhận giấy phép file `u2net.onnx`, cập nhật PRD (Non-Goals đang ghi "chỉnh sửa ảnh"), thử trong `.exe`, cải thiện ảnh anime và độ sắc viền.
 - SQLite lịch sử xử lý: đang là Non-Goal, cần đổi PRD trước.
 - REST API cục bộ: chỉ có thiết kế (`ARCHITECTURE.md` 3.4).
 - Định dạng ảnh ngoài PNG/JPG (WebP, BMP).
