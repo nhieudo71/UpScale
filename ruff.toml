@@ -1,0 +1,6 @@
+# Ghim bộ rule để kết quả lint không đổi khi nâng phiên bản ruff.
+# E4, E7, E9 và F là bộ rule lõi: lỗi cú pháp, import, tên chưa định nghĩa, biến thừa.
+target-version = "py311"
+
+[lint]
+select = ["E4", "E7", "E9", "F"]

@@ -1,0 +1,7 @@
+# Mẫu cấu hình UpScale. Chép thành config.toml cạnh run.py (hoặc cạnh UpScale.exe) rồi sửa.
+# Xóa config.toml thì app dùng giá trị mặc định. Giá trị sai bị bỏ qua và ghi vào logs/app.log.
+
+gpu_id = 0                   # Chỉ số GPU Vulkan, số nguyên >= 0. Máy nhiều GPU thì thử 1, 2...
+tile = 0                     # Kích thước tile, số nguyên >= 0. 0 = engine tự chọn
+max_output_pixels = 150000000  # Giới hạn số điểm ảnh của ảnh kết quả, >= 0. Đừng đặt 0 hoặc trên 179 triệu: Pillow không mở được ảnh lớn hơn nên app sẽ vứt kết quả
+engine_timeout_s = 600       # Giây tối đa cho một lần xử lý, số nguyên >= 1

@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# Pull request mới đẩy lên thì hủy lần chạy cũ của cùng nhánh.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.11" # config.py dùng tomllib nên cần >= 3.11
+  PYTHONUTF8: "1"
+
+jobs:
+  lint:
+    name: Cú pháp và lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Cài ruff
+        run: python -m pip install ruff==0.17.4
+
+      - name: Kiểm tra cú pháp (compileall)
+        run: python -m compileall -q src tests run.py
+
+      - name: Ruff
+        run: ruff check src tests run.py
+
+  test-build:
+    name: Test và build trên Windows
+    needs: lint
+    # Windows vì app là CustomTkinter (cần cửa sổ Tk thật) và đóng gói thành .exe.
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Cài thư viện
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Chạy test
+        # Engine giả thay cho realesrgan-ncnn-vulkan, runner không có GPU.
+        env:
+          PYTHONPATH: src
+        run: python -W error::ResourceWarning -m unittest discover -s tests -t . -v
+
+      - name: Build UpScale.exe (PyInstaller)
+        run: pyinstaller --noconfirm --clean UpScale.spec
+
+      - name: Chạy thử UpScale.exe
+        shell: pwsh
+        run: ./scripts/smoke_exe.ps1 -Dist dist/UpScale
+
+      - name: Nén bản build
+        shell: pwsh
+        run: Compress-Archive -Path dist/UpScale -DestinationPath UpScale-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UpScale-windows-pr-${{ github.event.pull_request.number || github.run_number }}
+          path: UpScale-windows.zip
+          retention-days: 7
+          if-no-files-found: error

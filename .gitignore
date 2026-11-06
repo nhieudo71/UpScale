@@ -1,0 +1,15 @@
+# Engine Real-ESRGAN (~51 MB, có .exe) tải riêng, xem docs/DECISIONS.md
+engine/
+
+# Sinh ra khi chạy
+logs/
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+.ruff_cache/
+
+# Cấu hình riêng từng máy (mẫu: config.example.toml)
+config.toml
+.env
